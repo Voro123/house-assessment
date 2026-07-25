@@ -30,10 +30,27 @@ jobs:
           gradle-version: '8.7'
 
       - name: Build debug APK
-        run: gradle --no-daemon :app:assembleDebug
+        shell: bash
+        run: |
+          set -o pipefail
+          gradle --no-daemon --console=plain --stacktrace :app:assembleDebug 2>&1 | tee android-build.log
 
       - name: Run unit tests
-        run: gradle --no-daemon :app:testDebugUnitTest
+        shell: bash
+        run: |
+          set -o pipefail
+          gradle --no-daemon --console=plain :app:testDebugUnitTest 2>&1 | tee android-test.log
+
+      - name: Upload build logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: android-build-logs
+          path: |
+            android-build.log
+            android-test.log
+          if-no-files-found: ignore
+          retention-days: 7
 
       - name: Upload installable APK
         uses: actions/upload-artifact@v4
