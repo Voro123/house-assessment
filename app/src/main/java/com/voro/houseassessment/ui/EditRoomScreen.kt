@@ -1,5 +1,6 @@
 package com.voro.houseassessment.ui
 
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -36,11 +37,15 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SuggestionChip
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -49,6 +54,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
+import com.voro.houseassessment.data.CachedContact
 import com.voro.houseassessment.data.RoomRecord
 import com.voro.houseassessment.util.AssessmentEngine
 import java.io.File
@@ -60,17 +66,36 @@ import java.time.format.DateTimeFormatter
 @Composable
 fun EditRoomScreen(
     room: RoomRecord,
+    cachedBudget: Double?,
+    recentContacts: List<CachedContact>,
     onChange: (RoomRecord) -> Unit,
     onBack: () -> Unit,
     onSave: () -> Unit,
     onPickPhotos: () -> Unit,
     onTakePhoto: () -> Unit,
     onRemovePhoto: (String) -> Unit,
+    onApplyCachedBudget: () -> Unit,
+    onApplyContact: (CachedContact) -> Unit,
     onUseCurrentLocation: () -> Unit,
     onOpenMap: () -> Unit,
     locationBusy: Boolean
 ) {
     val result = remember(room) { AssessmentEngine.evaluate(room) }
+    var selectedPhotoIndex by remember { mutableStateOf<Int?>(null) }
+
+    val photoIndex = selectedPhotoIndex
+    if (photoIndex != null && room.photos.isNotEmpty()) {
+        PhotoViewerDialog(
+            photos = room.photos,
+            initialIndex = photoIndex.coerceIn(0, room.photos.lastIndex),
+            onDismiss = { selectedPhotoIndex = null },
+            onDelete = { path ->
+                val deletingLastPhoto = room.photos.size == 1
+                onRemovePhoto(path)
+                if (deletingLastPhoto) selectedPhotoIndex = null
+            }
+        )
+    }
 
     Scaffold(
         topBar = {
@@ -134,6 +159,20 @@ fun EditRoomScreen(
                             suffix = "元",
                             modifier = Modifier.weight(1f)
                         )
+                    }
+                    if (cachedBudget != null) {
+                        Spacer(Modifier.height(8.dp))
+                        if (room.targetBudget == cachedBudget) {
+                            Text(
+                                "已使用本机缓存的常用预算：${formatMoney(cachedBudget)} 元",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.primary
+                            )
+                        } else {
+                            OutlinedButton(onClick = onApplyCachedBudget) {
+                                Text("套用常用预算 ${formatMoney(cachedBudget)} 元")
+                            }
+                        }
                     }
                     Spacer(Modifier.height(10.dp))
                     Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -214,7 +253,7 @@ fun EditRoomScreen(
             }
 
             item {
-                SectionCard(title = "现场照片", subtitle = "建议拍摄全景、窗外、厨卫、空调铭牌、墙角和水龙头。最多保留 8 张。") {
+                SectionCard(title = "现场照片", subtitle = "点击缩略图可全屏放大、缩放并切换查看。建议拍摄全景、窗外、厨卫、空调铭牌、墙角和水龙头。最多 8 张。") {
                     Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                         FilledTonalButton(onClick = onTakePhoto, modifier = Modifier.weight(1f), enabled = room.photos.size < 8) {
                             Icon(Icons.Default.AddAPhoto, contentDescription = null)
@@ -234,9 +273,12 @@ fun EditRoomScreen(
                                 Box {
                                     AsyncImage(
                                         model = File(path),
-                                        contentDescription = "房源照片 ${index + 1}",
+                                        contentDescription = "房源照片 ${index + 1}，点击查看大图",
                                         contentScale = ContentScale.Crop,
-                                        modifier = Modifier.size(132.dp).clip(RoundedCornerShape(14.dp))
+                                        modifier = Modifier
+                                            .size(132.dp)
+                                            .clip(RoundedCornerShape(14.dp))
+                                            .clickable { selectedPhotoIndex = index }
                                     )
                                     Card(
                                         modifier = Modifier.align(Alignment.TopEnd).padding(4.dp),
@@ -254,7 +296,35 @@ fun EditRoomScreen(
             }
 
             item {
-                SectionCard(title = "联系人", subtitle = "记录房东、中介或转租人的联系方式，避免看完几套后混淆。") {
+                SectionCard(title = "联系人", subtitle = "保存房源时会在本机缓存最近 8 个联系人，下次点击即可整组带入。") {
+                    if (recentContacts.isNotEmpty()) {
+                        Text(
+                            "最近联系人（点击带入）",
+                            style = MaterialTheme.typography.labelLarge,
+                            fontWeight = FontWeight.Medium
+                        )
+                        Spacer(Modifier.height(6.dp))
+                        LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            itemsIndexed(recentContacts) { _, contact ->
+                                SuggestionChip(
+                                    onClick = { onApplyContact(contact) },
+                                    label = {
+                                        Text(
+                                            buildString {
+                                                append(contact.displayName)
+                                                if (contact.phone.isNotBlank() && contact.phone != contact.displayName) {
+                                                    append(" · ")
+                                                    append(contact.phone)
+                                                }
+                                            },
+                                            maxLines = 1
+                                        )
+                                    }
+                                )
+                            }
+                        }
+                        Spacer(Modifier.height(10.dp))
+                    }
                     OutlinedTextField(
                         value = room.contactName,
                         onValueChange = { onChange(room.copy(contactName = it)) },
@@ -380,3 +450,9 @@ fun EditRoomScreen(
 private fun formatTimestamp(timestamp: Long): String = Instant.ofEpochMilli(timestamp)
     .atZone(ZoneId.systemDefault())
     .format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm"))
+
+private fun formatMoney(value: Double): String = if (value % 1.0 == 0.0) {
+    value.toLong().toString()
+} else {
+    "%.2f".format(value)
+}
