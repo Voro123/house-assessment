@@ -1,8 +1,8 @@
 package com.voro.houseassessment.ui
 
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -40,16 +40,21 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
 import com.voro.houseassessment.data.RoomRecord
+import com.voro.houseassessment.data.UserDefaultsRepository
 import com.voro.houseassessment.util.AssessmentEngine
 import java.io.File
 import java.time.Instant
@@ -71,6 +76,22 @@ fun EditRoomScreen(
     locationBusy: Boolean
 ) {
     val result = remember(room) { AssessmentEngine.evaluate(room) }
+    val context = LocalContext.current
+    val defaultsRepository = remember { UserDefaultsRepository(context.applicationContext) }
+    var selectedPhotoIndex by remember { mutableStateOf<Int?>(null) }
+
+    LaunchedEffect(room.id) {
+        if (room.id == 0L && room.targetBudget == null) {
+            defaultsRepository.createRoomWithDefaults().targetBudget?.let { cachedBudget ->
+                onChange(room.copy(targetBudget = cachedBudget))
+            }
+        }
+    }
+
+    fun saveAndCacheDefaults() {
+        defaultsRepository.capture(room)
+        onSave()
+    }
 
     Scaffold(
         topBar = {
@@ -80,14 +101,16 @@ fun EditRoomScreen(
                     IconButton(onClick = onBack) { Icon(Icons.Default.ArrowBack, contentDescription = "返回") }
                 },
                 actions = {
-                    IconButton(onClick = onSave) { Icon(Icons.Default.Save, contentDescription = "保存") }
+                    IconButton(onClick = ::saveAndCacheDefaults) {
+                        Icon(Icons.Default.Save, contentDescription = "保存")
+                    }
                 }
             )
         },
         bottomBar = {
             Surface(shadowElevation = 8.dp) {
                 Button(
-                    onClick = onSave,
+                    onClick = ::saveAndCacheDefaults,
                     modifier = Modifier.fillMaxWidth().padding(16.dp)
                 ) {
                     Icon(Icons.Default.Save, contentDescription = null)
@@ -102,9 +125,7 @@ fun EditRoomScreen(
             contentPadding = androidx.compose.foundation.layout.PaddingValues(16.dp),
             verticalArrangement = Arrangement.spacedBy(14.dp)
         ) {
-            item {
-                AssessmentCard(result)
-            }
+            item { AssessmentCard(result) }
 
             item {
                 SectionCard(
@@ -135,6 +156,11 @@ fun EditRoomScreen(
                             modifier = Modifier.weight(1f)
                         )
                     }
+                    Text(
+                        "目标预算会在保存后自动缓存，新建房源时直接带入。",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
                     Spacer(Modifier.height(10.dp))
                     Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                         NullableDoubleField(
@@ -199,7 +225,11 @@ fun EditRoomScreen(
                     }
                     Spacer(Modifier.height(10.dp))
                     Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                        FilledTonalButton(onClick = onUseCurrentLocation, enabled = !locationBusy, modifier = Modifier.weight(1f)) {
+                        FilledTonalButton(
+                            onClick = onUseCurrentLocation,
+                            enabled = !locationBusy,
+                            modifier = Modifier.weight(1f)
+                        ) {
                             Icon(Icons.Default.LocationOn, contentDescription = null)
                             Spacer(Modifier.width(6.dp))
                             Text(if (locationBusy) "定位中…" else "当前位置")
@@ -214,14 +244,25 @@ fun EditRoomScreen(
             }
 
             item {
-                SectionCard(title = "现场照片", subtitle = "建议拍摄全景、窗外、厨卫、空调铭牌、墙角和水龙头。最多保留 8 张。") {
+                SectionCard(
+                    title = "现场照片",
+                    subtitle = "建议拍摄全景、窗外、厨卫、空调铭牌、墙角和水龙头。点击缩略图可放大检查，最多 8 张。"
+                ) {
                     Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                        FilledTonalButton(onClick = onTakePhoto, modifier = Modifier.weight(1f), enabled = room.photos.size < 8) {
+                        FilledTonalButton(
+                            onClick = onTakePhoto,
+                            modifier = Modifier.weight(1f),
+                            enabled = room.photos.size < 8
+                        ) {
                             Icon(Icons.Default.AddAPhoto, contentDescription = null)
                             Spacer(Modifier.width(6.dp))
                             Text("拍照")
                         }
-                        OutlinedButton(onClick = onPickPhotos, modifier = Modifier.weight(1f), enabled = room.photos.size < 8) {
+                        OutlinedButton(
+                            onClick = onPickPhotos,
+                            modifier = Modifier.weight(1f),
+                            enabled = room.photos.size < 8
+                        ) {
                             Icon(Icons.Default.PhotoLibrary, contentDescription = null)
                             Spacer(Modifier.width(6.dp))
                             Text("相册")
@@ -234,15 +275,23 @@ fun EditRoomScreen(
                                 Box {
                                     AsyncImage(
                                         model = File(path),
-                                        contentDescription = "房源照片 ${index + 1}",
+                                        contentDescription = "房源照片 ${index + 1}，点击放大",
                                         contentScale = ContentScale.Crop,
-                                        modifier = Modifier.size(132.dp).clip(RoundedCornerShape(14.dp))
+                                        modifier = Modifier
+                                            .size(132.dp)
+                                            .clip(RoundedCornerShape(14.dp))
+                                            .clickable { selectedPhotoIndex = index }
                                     )
                                     Card(
                                         modifier = Modifier.align(Alignment.TopEnd).padding(4.dp),
-                                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.88f))
+                                        colors = CardDefaults.cardColors(
+                                            containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.88f)
+                                        )
                                     ) {
-                                        IconButton(onClick = { onRemovePhoto(path) }, modifier = Modifier.size(36.dp)) {
+                                        IconButton(
+                                            onClick = { onRemovePhoto(path) },
+                                            modifier = Modifier.size(36.dp)
+                                        ) {
                                             Icon(Icons.Default.Delete, contentDescription = "删除照片")
                                         }
                                     }
@@ -254,7 +303,20 @@ fun EditRoomScreen(
             }
 
             item {
-                SectionCard(title = "联系人", subtitle = "记录房东、中介或转租人的联系方式，避免看完几套后混淆。") {
+                SectionCard(
+                    title = "联系人",
+                    subtitle = "联系人会按最近使用自动缓存；点击历史联系人即可整组填入。"
+                ) {
+                    CachedContactPicker { preset ->
+                        onChange(
+                            room.copy(
+                                contactName = preset.name,
+                                contactPhone = preset.phone,
+                                contactChannel = preset.channel,
+                                contactNotes = preset.notes
+                            )
+                        )
+                    }
                     OutlinedTextField(
                         value = room.contactName,
                         onValueChange = { onChange(room.copy(contactName = it)) },
@@ -326,11 +388,11 @@ fun EditRoomScreen(
                     NullableRatingRow("家具家电", room.furnishingRating, { onChange(room.copy(furnishingRating = it)) })
                     NullableRatingRow("收纳空间", room.storageRating, { onChange(room.copy(storageRating = it)) })
                     NullableRatingRow("网络与手机信号", room.networkRating, { onChange(room.copy(networkRating = it)) })
-                    if ((room.floor ?: 0) >= 4) {
-                        NullableBooleanRow("高楼层是否有电梯", room.hasElevator, { onChange(room.copy(hasElevator = it)) })
-                    } else {
-                        NullableBooleanRow("是否有电梯", room.hasElevator, { onChange(room.copy(hasElevator = it)) })
-                    }
+                    NullableBooleanRow(
+                        if ((room.floor ?: 0) >= 4) "高楼层是否有电梯" else "是否有电梯",
+                        room.hasElevator,
+                        { onChange(room.copy(hasElevator = it)) }
+                    )
                     NullableBooleanRow("是否允许养宠物", room.petAllowed, { onChange(room.copy(petAllowed = it)) }, "允许", "不允许")
                 }
             }
@@ -374,6 +436,14 @@ fun EditRoomScreen(
 
             item { Spacer(Modifier.height(96.dp)) }
         }
+    }
+
+    selectedPhotoIndex?.let { index ->
+        PhotoViewerDialog(
+            photos = room.photos,
+            initialIndex = index.coerceIn(0, room.photos.lastIndex),
+            onDismiss = { selectedPhotoIndex = null }
+        )
     }
 }
 
