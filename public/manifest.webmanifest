@@ -1,0 +1,17 @@
+{
+  "name": "住哪儿 · 租房评估",
+  "short_name": "住哪儿",
+  "description": "边看房边记录，所有项目都可跳过并随时补充。",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#f6f3ea",
+  "theme_color": "#f6f3ea",
+  "icons": [
+    {
+      "src": "/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}
