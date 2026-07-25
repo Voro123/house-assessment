@@ -3,6 +3,8 @@ plugins {
     id("org.jetbrains.kotlin.android")
 }
 
+val stableDebugKeystore = rootProject.file("ci/house-assessment-debug.keystore")
+
 android {
     namespace = "com.voro.houseassessment"
     compileSdk = 34
@@ -18,7 +20,23 @@ android {
         vectorDrawables.useSupportLibrary = true
     }
 
+    signingConfigs {
+        if (stableDebugKeystore.exists()) {
+            create("stableDebug") {
+                storeFile = stableDebugKeystore
+                storePassword = "houseassessment"
+                keyAlias = "houseassessment"
+                keyPassword = "houseassessment"
+            }
+        }
+    }
+
     buildTypes {
+        debug {
+            if (stableDebugKeystore.exists()) {
+                signingConfig = signingConfigs.getByName("stableDebug")
+            }
+        }
         release {
             isMinifyEnabled = false
             proguardFiles(
