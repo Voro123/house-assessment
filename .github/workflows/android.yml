@@ -29,6 +29,12 @@ jobs:
         with:
           gradle-version: '8.7'
 
+      - name: Prepare stable debug signing
+        shell: bash
+        run: |
+          base64 --decode ci/house-assessment-debug.keystore.b64 > ci/house-assessment-debug.keystore
+          chmod 600 ci/house-assessment-debug.keystore
+
       - name: Build debug APK
         shell: bash
         run: |
