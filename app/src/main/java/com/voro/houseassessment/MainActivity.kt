@@ -25,6 +25,7 @@ import com.google.android.gms.location.Priority
 import com.google.android.gms.tasks.CancellationTokenSource
 import com.voro.houseassessment.data.RoomRecord
 import com.voro.houseassessment.data.RoomRepository
+import com.voro.houseassessment.data.UserPreferencesRepository
 import com.voro.houseassessment.ui.EditRoomScreen
 import com.voro.houseassessment.ui.HomeScreen
 import com.voro.houseassessment.ui.HouseAssessmentTheme
@@ -43,7 +44,9 @@ class MainActivity : ComponentActivity() {
             HouseAssessmentTheme {
                 Surface {
                     val repository = remember { RoomRepository(applicationContext) }
+                    val preferencesRepository = remember { UserPreferencesRepository(applicationContext) }
                     var rooms by remember { mutableStateOf(repository.getAll()) }
+                    var userDefaults by remember { mutableStateOf(preferencesRepository.getDefaults()) }
                     var editingRoom by remember { mutableStateOf<RoomRecord?>(null) }
                     var showingMap by remember { mutableStateOf(false) }
                     var locationBusy by remember { mutableStateOf(false) }
@@ -136,18 +139,22 @@ class MainActivity : ComponentActivity() {
                             val current = requireNotNull(editingRoom)
                             EditRoomScreen(
                                 room = current,
+                                cachedBudget = userDefaults.targetBudget,
+                                recentContacts = userDefaults.recentContacts,
                                 onChange = { editingRoom = it },
                                 onBack = { editingRoom = null },
                                 onSave = {
                                     editingRoom?.let { roomToSave ->
                                         lifecycleScope.launch {
-                                            val refreshed = withContext(Dispatchers.IO) {
+                                            val (refreshedRooms, refreshedDefaults) = withContext(Dispatchers.IO) {
                                                 repository.save(roomToSave.copy(updatedAt = System.currentTimeMillis()))
-                                                repository.getAll()
+                                                preferencesRepository.remember(roomToSave)
+                                                repository.getAll() to preferencesRepository.getDefaults()
                                             }
-                                            rooms = refreshed
+                                            rooms = refreshedRooms
+                                            userDefaults = refreshedDefaults
                                             editingRoom = null
-                                            Toast.makeText(this@MainActivity, "房源已保存", Toast.LENGTH_SHORT).show()
+                                            Toast.makeText(this@MainActivity, "房源与常用信息已保存", Toast.LENGTH_SHORT).show()
                                         }
                                     }
                                 },
@@ -166,6 +173,15 @@ class MainActivity : ComponentActivity() {
                                 },
                                 onRemovePhoto = { path ->
                                     editingRoom = editingRoom?.let { it.copy(photos = it.photos - path) }
+                                },
+                                onApplyCachedBudget = {
+                                    val budget = userDefaults.targetBudget
+                                    if (budget != null) {
+                                        editingRoom = editingRoom?.copy(targetBudget = budget)
+                                    }
+                                },
+                                onApplyContact = { contact ->
+                                    editingRoom = editingRoom?.let { preferencesRepository.applyContact(it, contact) }
                                 },
                                 onUseCurrentLocation = {
                                     val fine = ContextCompat.checkSelfPermission(this@MainActivity, Manifest.permission.ACCESS_FINE_LOCATION)
@@ -191,7 +207,11 @@ class MainActivity : ComponentActivity() {
                                 rooms = rooms,
                                 onAdd = {
                                     val now = System.currentTimeMillis()
-                                    editingRoom = RoomRecord(createdAt = now, updatedAt = now)
+                                    editingRoom = RoomRecord(
+                                        targetBudget = userDefaults.targetBudget,
+                                        createdAt = now,
+                                        updatedAt = now
+                                    )
                                 },
                                 onEdit = { room -> editingRoom = room },
                                 onDelete = { room ->
