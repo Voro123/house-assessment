@@ -13,8 +13,8 @@ android {
         applicationId = "com.voro.houseassessment"
         minSdk = 26
         targetSdk = 34
-        versionCode = 3
-        versionName = "1.2.0"
+        versionCode = 4
+        versionName = "1.3.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables.useSupportLibrary = true
@@ -87,6 +87,9 @@ dependencies {
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.8.1")
     implementation("com.google.android.gms:play-services-location:21.3.0")
     implementation("io.coil-kt:coil-compose:2.7.0")
+
+    // Native Baidu map. 7.6.7 is the newest BaiduMapSDK_Map artifact currently published to Maven Central.
+    implementation("com.baidu.lbsyun:BaiduMapSDK_Map:7.6.7")
 
     testImplementation("junit:junit:4.13.2")
 }
